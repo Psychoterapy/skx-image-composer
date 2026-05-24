@@ -175,8 +175,8 @@ const ctx = bgCanvas.getContext('2d');
 // ---- INIT ----
 function init() {
   applyCanvas();
-  updateScale();
   renderBg();
+  updateScale();
   window.addEventListener('resize', updateScale);
   document.getElementById('canvas-area').addEventListener('wheel', onWheel, {passive:false});
   document.addEventListener('mousemove', onMouseMove);

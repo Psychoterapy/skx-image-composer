@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>Kompozytor Miniaturek SKX</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, sans-serif; background: #1a1a1a; color: #eee; display: flex; height: 100vh; overflow: hidden; }
+
+#sidebar {
+  width: 300px; min-width: 300px; background: #242424; border-right: 1px solid #333;
+  display: flex; flex-direction: column; overflow-y: auto;
+}
+#sidebar h1 { font-size: 14px; font-weight: 700; padding: 14px 16px; border-bottom: 1px solid #333; color: #fff; letter-spacing: .5px; }
+
+.section { padding: 12px 16px; border-bottom: 1px solid #2e2e2e; }
+.section h2 { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 10px; }
+
+.row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.row label { font-size: 12px; color: #aaa; width: 60px; flex-shrink: 0; }
+.row input[type=number] { flex: 1; background: #1a1a1a; border: 1px solid #444; color: #fff; padding: 5px 8px; border-radius: 4px; font-size: 12px; }
+.row input[type=color] { width: 36px; height: 28px; border: none; border-radius: 4px; cursor: pointer; padding: 2px; background: #1a1a1a; }
+.row input[type=text] { flex: 1; background: #1a1a1a; border: 1px solid #444; color: #fff; padding: 5px 8px; border-radius: 4px; font-size: 11px; }
+
+#layer-list { list-style: none; }
+#layer-list li {
+  padding: 8px 10px; border-radius: 6px; margin-bottom: 4px; cursor: pointer;
+  background: #2a2a2a; border: 1px solid transparent; font-size: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+#layer-list li:hover { background: #333; }
+#layer-list li.selected { border-color: #5b8dff; background: #1e2a44; }
+#layer-list li .layer-icon { font-size: 16px; }
+#layer-list li .layer-name { flex: 1; }
+#layer-list li .layer-del { color: #666; font-size: 14px; cursor: pointer; padding: 2px 6px; border-radius: 3px; }
+#layer-list li .layer-del:hover { color: #ef4444; background: #2a1a1a; }
+
+.add-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn { padding: 7px 12px; border-radius: 6px; border: none; cursor: pointer; font-size: 12px; font-weight: 500; }
+.btn-primary { background: #3b5bdb; color: #fff; }
+.btn-primary:hover { background: #4c6ef5; }
+.btn-secondary { background: #2e2e2e; color: #ccc; border: 1px solid #444; }
+.btn-secondary:hover { background: #3a3a3a; }
+.btn-success { background: #2f9e44; color: #fff; }
+.btn-success:hover { background: #37b24d; }
+.btn-warning { background: #e67700; color: #fff; }
+.btn-warning:hover { background: #f08c00; }
+
+#props .section h2 span { color: #5b8dff; }
+
+.toggle-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.toggle-row label { font-size: 12px; color: #aaa; }
+.toggle { position: relative; width: 36px; height: 20px; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; inset: 0; background: #444; border-radius: 20px; cursor: pointer; transition: .2s; }
+.slider:before { content: ''; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: .2s; }
+.toggle input:checked + .slider { background: #3b5bdb; }
+.toggle input:checked + .slider:before { transform: translateX(16px); }
+
+#config-output { background: #111; border: 1px solid #333; border-radius: 6px; padding: 10px; font-size: 10px; color: #7ec8a0; font-family: monospace; white-space: pre; overflow-x: auto; max-height: 160px; overflow-y: auto; margin-top: 8px; }
+
+.url-input-row { flex-direction: column; align-items: stretch; gap: 4px; margin-bottom: 8px; }
+.url-input-row label { font-size: 11px; color: #888; width: auto; }
+
+#canvas-area {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  background: #111; overflow: hidden; position: relative;
+}
+#canvas-wrap {
+  position: relative; box-shadow: 0 0 40px rgba(0,0,0,.8);
+  transform-origin: center center;
+  overflow: hidden;
+  background: white;
+}
+#canvas-bg { position: absolute; inset: 0; pointer-events: none; }
+
+.layer-el {
+  position: absolute; cursor: move; user-select: none;
+  border: 2px solid transparent;
+}
+.layer-el:hover { border-color: rgba(91,141,255,.5); }
+.layer-el.selected { border-color: #5b8dff; }
+.layer-el img { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
+.layer-el.circle-layer { border-radius: 50%; overflow: hidden; }
+
+.resize-handle {
+  position: absolute; width: 10px; height: 10px; background: #5b8dff;
+  border: 1px solid #fff; border-radius: 2px; cursor: nwse-resize;
+  bottom: -5px; right: -5px; z-index: 10;
+}
+
+#zoom-info { position: absolute; bottom: 12px; right: 16px; font-size: 11px; color: #555; }
+
+.hint { font-size: 11px; color: #555; margin-top: 8px; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h1>🖼 Kompozytor Miniaturek</h1>
+
+  <div class="section">
+    <h2>Płótno</h2>
+    <div class="row">
+      <label>Szerokość</label>
+      <input type="number" id="cv-w" value="1080" min="100" max="4000">
+    </div>
+    <div class="row">
+      <label>Wysokość</label>
+      <input type="number" id="cv-h" value="1080" min="100" max="4000">
+    </div>
+    <div class="row">
+      <label>Tło</label>
+      <input type="color" id="cv-bg" value="#ffffff">
+    </div>
+    <button class="btn btn-secondary" onclick="applyCanvas()" style="width:100%;margin-top:6px">Zastosuj</button>
+  </div>
+
+  <div class="section">
+    <h2>Warstwy</h2>
+    <ul id="layer-list"></ul>
+    <div class="add-btns" style="margin-top:8px">
+      <button class="btn btn-primary" onclick="addImage()">+ Zdjęcie</button>
+      <button class="btn btn-secondary" onclick="addCircle()">+ Dekor (kółko)</button>
+    </div>
+    <p class="hint">Możesz też przeciągnąć zdjęcie z pulpitu na białe płótno.</p>
+  </div>
+
+  <div class="section" id="props">
+    <h2>Właściwości <span id="props-title"></span></h2>
+    <div id="props-content"><div style="padding:8px 0;font-size:12px;color:#555">Kliknij warstwę aby edytować</div></div>
+  </div>
+
+  <div class="section">
+    <h2>Template</h2>
+    <div class="add-btns">
+      <button class="btn btn-success" onclick="exportConfig()">💾 Zapisz template</button>
+      <button class="btn btn-warning" onclick="triggerLoadConfig()">📂 Wczytaj template</button>
+    </div>
+    <p class="hint">Zapisz układ jako JSON, potem wczytaj go dla kolejnego koloru — zmieniasz tylko kółko i zdjęcia.</p>
+    <div id="config-output" style="display:none"></div>
+    <input type="file" id="config-file-input" accept=".json,application/json" style="display:none">
+  </div>
+
+  <div class="section">
+    <h2>Eksport PNG</h2>
+    <button class="btn btn-primary" onclick="exportPNG()" style="width:100%">📸 Eksportuj PNG</button>
+  </div>
+</div>
+
+<div id="canvas-area">
+  <div id="canvas-wrap">
+    <canvas id="canvas-bg"></canvas>
+  </div>
+  <div id="zoom-info">Scroll = zoom</div>
+</div>
+
+<input type="file" id="file-input" accept="image/*" style="display:none" multiple>
+
+<script type="module">
+import removeBackground from 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/dist/index.mjs';
+
+let layers = [];
+let selectedId = null;
+let nextId = 1;
+let canvasW = 1080, canvasH = 1080;
+let scale = 0.6;
+let dragState = null;
+let resizeState = null;
+
+const wrap = document.getElementById('canvas-wrap');
+const bgCanvas = document.getElementById('canvas-bg');
+const ctx = bgCanvas.getContext('2d');
+
+// ---- INIT ----
+function init() {
+  applyCanvas();
+  updateScale();
+  renderBg();
+  window.addEventListener('resize', updateScale);
+  document.getElementById('canvas-area').addEventListener('wheel', onWheel, {passive:false});
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+  document.getElementById('file-input').addEventListener('change', onFileChosen);
+  document.getElementById('config-file-input').addEventListener('change', onConfigFileChosen);
+
+  const area = document.getElementById('canvas-area');
+  area.addEventListener('dragover', e => { e.preventDefault(); area.style.outline = '3px dashed #5b8dff'; });
+  area.addEventListener('dragleave', () => { area.style.outline = ''; });
+  area.addEventListener('drop', e => {
+    e.preventDefault();
+    area.style.outline = '';
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+    const rect = wrap.getBoundingClientRect();
+    const dropX = Math.round((e.clientX - rect.left) / scale);
+    const dropY = Math.round((e.clientY - rect.top) / scale);
+    files.forEach((file, i) => {
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const img = new window.Image();
+        img.onload = () => {
+          const ratio = img.width / img.height;
+          const defW = Math.min(500, canvasW * 0.5);
+          const defH = Math.round(defW / ratio);
+          const layer = {
+            id: nextId++, type: 'image',
+            x: Math.max(0, dropX - Math.round(defW/2) + i*20),
+            y: Math.max(0, dropY - Math.round(defH/2) + i*20),
+            w: Math.round(defW), h: defH,
+            src: ev.target.result, removeBg: false,
+            name: file.name.replace(/\.[^.]+$/, ''),
+            _img: img
+          };
+          layers.push(layer);
+          renderLayers();
+          selectLayer(layer.id);
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  });
+}
+
+function applyCanvas() {
+  canvasW = parseInt(document.getElementById('cv-w').value) || 1080;
+  canvasH = parseInt(document.getElementById('cv-h').value) || 1080;
+  bgCanvas.width = canvasW;
+  bgCanvas.height = canvasH;
+  wrap.style.width = canvasW + 'px';
+  wrap.style.height = canvasH + 'px';
+  updateScale();
+  renderBg();
+}
+
+function updateScale() {
+  const area = document.getElementById('canvas-area');
+  const maxW = area.clientWidth - 60;
+  const maxH = area.clientHeight - 60;
+  scale = Math.min(maxW / canvasW, maxH / canvasH, 1);
+  wrap.style.transform = `scale(${scale})`;
+  document.getElementById('zoom-info').textContent = `Zoom: ${Math.round(scale*100)}%`;
+}
+
+function onWheel(e) {
+  e.preventDefault();
+  scale = Math.max(0.1, Math.min(2, scale - e.deltaY * 0.001));
+  wrap.style.transform = `scale(${scale})`;
+  document.getElementById('zoom-info').textContent = `Zoom: ${Math.round(scale*100)}%`;
+}
+
+function renderBg() {
+  const bg = document.getElementById('cv-bg').value;
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, canvasW, canvasH);
+}
+
+// ---- LAYERS ----
+function addImage() {
+  document.getElementById('file-input').click();
+}
+
+function onFileChosen(e) {
+  Array.from(e.target.files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new window.Image();
+      img.onload = () => {
+        const ratio = img.width / img.height;
+        const defW = Math.min(500, canvasW * 0.5);
+        const layer = {
+          id: nextId++, type: 'image',
+          x: 50, y: 50, w: Math.round(defW), h: Math.round(defW / ratio),
+          src: ev.target.result, removeBg: false,
+          name: file.name.replace(/\.[^.]+$/, ''),
+          _img: img
+        };
+        layers.push(layer);
+        renderLayers();
+        selectLayer(layer.id);
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+  e.target.value = '';
+}
+
+function addCircle() {
+  const layer = {
+    id: nextId++, type: 'circle',
+    x: 50, y: 50, w: 200, h: 200,
+    color: '#141414', color2: '#c8a96e',
+    name: 'Dekor ' + nextId
+  };
+  layers.push(layer);
+  renderLayers();
+  selectLayer(layer.id);
+}
+
+function deleteLayer(id) {
+  layers = layers.filter(l => l.id !== id);
+  if (selectedId === id) selectedId = null;
+  renderLayers();
+  renderProps();
+}
+
+function selectLayer(id) {
+  selectedId = id;
+  document.querySelectorAll('.layer-el').forEach(el => el.classList.remove('selected'));
+  const el = document.getElementById('layer-' + id);
+  if (el) el.classList.add('selected');
+  document.querySelectorAll('#layer-list li').forEach(li => li.classList.remove('selected'));
+  const li = document.querySelector(`#layer-list li[data-id="${id}"]`);
+  if (li) li.classList.add('selected');
+  renderProps();
+}
+
+function renderLayers() {
+  const list = document.getElementById('layer-list');
+  list.innerHTML = layers.slice().reverse().map(l => `
+    <li data-id="${l.id}" onclick="selectLayer(${l.id})">
+      <span class="layer-icon">${l.type === 'circle' ? '⬤' : '🖼'}</span>
+      <span class="layer-name">${l.name}</span>
+      <span class="layer-del" onclick="event.stopPropagation();deleteLayer(${l.id})">✕</span>
+    </li>`).join('');
+
+  document.querySelectorAll('.layer-el').forEach(el => el.remove());
+
+  layers.forEach(l => {
+    const el = document.createElement('div');
+    el.id = 'layer-' + l.id;
+    el.className = 'layer-el' + (l.type === 'circle' ? ' circle-layer' : '');
+    if (selectedId === l.id) el.classList.add('selected');
+    el.style.cssText = `left:${l.x}px;top:${l.y}px;width:${l.w}px;height:${l.h}px;`;
+
+    if (l.type === 'circle') {
+      el.style.background = `linear-gradient(90deg, ${l.color} 50%, ${l.color2 || l.color} 50%)`;
+      el.style.borderRadius = '50%';
+      el.style.overflow = 'hidden';
+    } else {
+      const src = (l.removeBg && l.srcNoBg) ? l.srcNoBg : l.src;
+      if (src) {
+        const img = document.createElement('img');
+        img.src = src;
+        el.appendChild(img);
+      }
+    }
+
+    const rh = document.createElement('div');
+    rh.className = 'resize-handle';
+    rh.addEventListener('mousedown', e => startResize(e, l.id));
+    el.appendChild(rh);
+
+    el.addEventListener('mousedown', e => {
+      if (e.target.classList.contains('resize-handle')) return;
+      selectLayer(l.id);
+      startDrag(e, l.id);
+    });
+
+    wrap.appendChild(el);
+  });
+}
+
+// ---- DRAG & RESIZE ----
+function startDrag(e, id) {
+  e.preventDefault();
+  const l = layers.find(x => x.id === id);
+  dragState = { id, startX: e.clientX, startY: e.clientY, origX: l.x, origY: l.y };
+}
+
+function startResize(e, id) {
+  e.preventDefault(); e.stopPropagation();
+  const l = layers.find(x => x.id === id);
+  resizeState = { id, startX: e.clientX, startY: e.clientY, origW: l.w, origH: l.h };
+}
+
+function onMouseMove(e) {
+  if (dragState) {
+    const dx = (e.clientX - dragState.startX) / scale;
+    const dy = (e.clientY - dragState.startY) / scale;
+    const l = layers.find(x => x.id === dragState.id);
+    l.x = Math.round(dragState.origX + dx);
+    l.y = Math.round(dragState.origY + dy);
+    const el = document.getElementById('layer-' + l.id);
+    if (el) { el.style.left = l.x + 'px'; el.style.top = l.y + 'px'; }
+    updatePropsLive(l);
+  }
+  if (resizeState) {
+    const dx = (e.clientX - resizeState.startX) / scale;
+    const dy = (e.clientY - resizeState.startY) / scale;
+    const l = layers.find(x => x.id === resizeState.id);
+    l.w = Math.max(20, Math.round(resizeState.origW + dx));
+    l.h = Math.max(20, Math.round(resizeState.origH + dy));
+    const el = document.getElementById('layer-' + l.id);
+    if (el) { el.style.width = l.w + 'px'; el.style.height = l.h + 'px'; }
+    updatePropsLive(l);
+  }
+}
+
+function onMouseUp() { dragState = null; resizeState = null; }
+
+// ---- PROPS ----
+function renderProps() {
+  const l = layers.find(x => x.id === selectedId);
+  const title = document.getElementById('props-title');
+  const content = document.getElementById('props-content');
+  if (!l) { title.textContent = ''; content.innerHTML = '<div style="padding:8px 0;font-size:12px;color:#555">Kliknij warstwę aby edytować</div>'; return; }
+  title.textContent = '— ' + l.name;
+
+  let html = `
+    <div class="row"><label>X</label><input type="number" id="p-x" value="${l.x}" oninput="setProp('x',+this.value)"></div>
+    <div class="row"><label>Y</label><input type="number" id="p-y" value="${l.y}" oninput="setProp('y',+this.value)"></div>
+    <div class="row"><label>Szer.</label><input type="number" id="p-w" value="${l.w}" oninput="setProp('w',+this.value)"></div>
+    <div class="row"><label>Wys.</label><input type="number" id="p-h" value="${l.h}" oninput="setProp('h',+this.value)"></div>`;
+
+  if (l.type === 'circle') {
+    html += `
+    <div class="row"><label>Kolor 1</label><input type="color" value="${l.color}" oninput="setProp('color',this.value)"><span style="font-size:11px;color:#888;margin-left:4px">lewa połowa</span></div>
+    <div class="row"><label>Kolor 2</label><input type="color" value="${l.color2||l.color}" oninput="setProp('color2',this.value)"><span style="font-size:11px;color:#888;margin-left:4px">prawa połowa</span></div>`;
+  } else {
+    html += `
+    <div class="row url-input-row" style="margin-top:4px">
+      <label>URL zdjęcia</label>
+      <input type="text" id="p-url" placeholder="https://... (opcjonalnie)" value="${l.srcUrl||''}"
+        onchange="setImageUrl(this.value)">
+    </div>
+    <div class="toggle-row" style="margin-top:4px">
+      <label>Usuń tło (AI)</label>
+      <label class="toggle"><input type="checkbox" ${l.removeBg?'checked':''} onchange="setProp('removeBg',this.checked)"><span class="slider"></span></label>
+    </div>`;
+  }
+  content.innerHTML = html;
+}
+
+function setProp(key, val) {
+  const l = layers.find(x => x.id === selectedId);
+  if (!l) return;
+  if (key === 'removeBg') {
+    l.removeBg = val;
+    if (val && !l.srcNoBg) {
+      removeBgAI(l, () => { renderLayers(); selectLayer(selectedId); });
+      return;
+    }
+  } else {
+    l[key] = val;
+  }
+  if (l.type === 'circle') {
+    const el = document.getElementById('layer-' + l.id);
+    if (el) el.style.background = `linear-gradient(90deg, ${l.color} 50%, ${l.color2||l.color} 50%)`;
+  }
+  renderLayers();
+  selectLayer(selectedId);
+}
+
+function setImageUrl(url) {
+  if (!url) return;
+  const l = layers.find(x => x.id === selectedId);
+  if (!l || l.type !== 'image') return;
+  l.srcUrl = url;
+  const img = new window.Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    l._img = img;
+    l.src = url;
+    l.srcNoBg = null;
+    l._imgNoBg = null;
+    renderLayers();
+    selectLayer(selectedId);
+  };
+  img.onerror = () => alert('Nie można załadować zdjęcia z tego URL.\nSprawdź czy URL jest publiczny i poprawny.');
+  img.src = url;
+}
+
+async function removeBgAI(l, cb) {
+  const label = document.querySelector('#props-content .toggle-row label:first-child');
+  if (label) label.textContent = '⏳ AI usuwa tło...';
+  try {
+    const res = await fetch(l.src);
+    const blob = await res.blob();
+    const resultBlob = await removeBackground(blob, { output: { format: 'image/png', quality: 1 } });
+    l.srcNoBg = URL.createObjectURL(resultBlob);
+    const imgNoBg = new window.Image();
+    imgNoBg.onload = () => { l._imgNoBg = imgNoBg; cb(); };
+    imgNoBg.src = l.srcNoBg;
+  } catch(e) {
+    console.error(e);
+    alert('Błąd usuwania tła: ' + e.message);
+    l.removeBg = false;
+    cb();
+  } finally {
+    if (label) label.textContent = 'Usuń tło (AI)';
+  }
+}
+
+function updatePropsLive(l) {
+  const px = document.getElementById('p-x'); if (px) px.value = l.x;
+  const py = document.getElementById('p-y'); if (py) py.value = l.y;
+  const pw = document.getElementById('p-w'); if (pw) pw.value = l.w;
+  const ph = document.getElementById('p-h'); if (ph) ph.value = l.h;
+}
+
+// ---- TEMPLATE: SAVE ----
+function exportConfig() {
+  const config = {
+    canvas: { width: canvasW, height: canvasH, bg: document.getElementById('cv-bg').value },
+    layers: layers.map(l => {
+      const base = { id: l.id, type: l.type, name: l.name, x: l.x, y: l.y, w: l.w, h: l.h };
+      if (l.type === 'circle') { base.color = l.color; base.color2 = l.color2 || l.color; }
+      if (l.type === 'image') { base.removeBg = l.removeBg; base.srcUrl = l.srcUrl || ''; }
+      return base;
+    })
+  };
+  const json = JSON.stringify(config, null, 2);
+  const out = document.getElementById('config-output');
+  out.style.display = 'block';
+  out.textContent = json;
+  navigator.clipboard?.writeText(json);
+
+  // Also offer download as file
+  const a = document.createElement('a');
+  a.download = 'template.json';
+  a.href = URL.createObjectURL(new Blob([json], {type:'application/json'}));
+  a.click();
+}
+
+// ---- TEMPLATE: LOAD ----
+function triggerLoadConfig() {
+  document.getElementById('config-file-input').click();
+}
+
+function onConfigFileChosen(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      applyConfigJSON(JSON.parse(ev.target.result));
+    } catch(err) {
+      alert('Błąd wczytywania template: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+function applyConfigJSON(cfg) {
+  if (cfg.canvas) {
+    document.getElementById('cv-w').value = cfg.canvas.width || 1080;
+    document.getElementById('cv-h').value = cfg.canvas.height || 1080;
+    document.getElementById('cv-bg').value = cfg.canvas.bg || '#ffffff';
+    applyCanvas();
+  }
+
+  layers = [];
+  selectedId = null;
+  const newLayers = [];
+  const promises = (cfg.layers || []).map(ld => new Promise(resolve => {
+    if (ld.type === 'circle') {
+      newLayers.push({ id: ld.id, type: 'circle', name: ld.name, x: ld.x, y: ld.y, w: ld.w, h: ld.h, color: ld.color || '#000', color2: ld.color2 || ld.color || '#000' });
+      resolve();
+    } else if (ld.type === 'image') {
+      const layer = { id: ld.id, type: 'image', name: ld.name, x: ld.x, y: ld.y, w: ld.w, h: ld.h, removeBg: ld.removeBg || false, srcUrl: ld.srcUrl || '', src: '' };
+      if (ld.srcUrl) {
+        const img = new window.Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => { layer._img = img; layer.src = ld.srcUrl; newLayers.push(layer); resolve(); };
+        img.onerror = () => { newLayers.push(layer); resolve(); };
+        img.src = ld.srcUrl;
+      } else {
+        newLayers.push(layer);
+        resolve();
+      }
+    } else resolve();
+  }));
+
+  Promise.all(promises).then(() => {
+    layers = newLayers.sort((a, b) => a.id - b.id);
+    nextId = layers.length ? Math.max(...layers.map(l => l.id)) + 1 : 1;
+    renderLayers();
+    renderProps();
+  });
+}
+
+// ---- EXPORT PNG ----
+function exportPNG() {
+  const exp = document.createElement('canvas');
+  exp.width = canvasW; exp.height = canvasH;
+  const c = exp.getContext('2d');
+  c.fillStyle = document.getElementById('cv-bg').value;
+  c.fillRect(0, 0, canvasW, canvasH);
+
+  layers.forEach(l => {
+    if (l.type === 'circle') {
+      const cx = l.x + l.w/2, cy = l.y + l.h/2, r = l.w/2;
+      c.save();
+      c.beginPath();
+      c.arc(cx, cy, r, 0, Math.PI*2);
+      c.clip();
+      c.fillStyle = l.color;
+      c.fillRect(l.x, l.y, l.w/2, l.h);
+      c.fillStyle = l.color2 || l.color;
+      c.fillRect(cx, l.y, l.w/2, l.h);
+      c.restore();
+    } else {
+      const imgToDraw = (l.removeBg && l._imgNoBg) ? l._imgNoBg : l._img;
+      if (imgToDraw) c.drawImage(imgToDraw, l.x, l.y, l.w, l.h);
+    }
+  });
+
+  const a = document.createElement('a');
+  a.download = 'miniaturka.png';
+  a.href = exp.toDataURL('image/png');
+  a.click();
+}
+
+// Expose to global (required for onclick="" in HTML with type="module")
+window.applyCanvas = applyCanvas;
+window.addImage = addImage;
+window.addCircle = addCircle;
+window.selectLayer = selectLayer;
+window.deleteLayer = deleteLayer;
+window.setProp = setProp;
+window.setImageUrl = setImageUrl;
+window.exportConfig = exportConfig;
+window.triggerLoadConfig = triggerLoadConfig;
+window.exportPNG = exportPNG;
+
+init();
+</script>
+</body>
+</html>
